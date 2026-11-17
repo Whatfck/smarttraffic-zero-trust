@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: traffic-sensor-simulator
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}
+        sasl.mechanism: PLAIN
+        sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USER:smarttraffic}" password="${KAFKA_PASSWORD:change-me-in-production}";
+smarttraffic:
+  kafka:
+    raw-topic: raw_traffic_data

@@ -1,0 +1,163 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smarttraffic
+      POSTGRES_USER: smarttraffic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [data]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks: [data]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-smarttraffic}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-me-in-production}
+      RABBITMQ_DEFAULT_VHOST: smarttraffic
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks: [data]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+
+  auth-server:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: auth-server/Dockerfile
+    environment:
+      SMARTTRAFFIC_CLIENT_SECRET: ${SMARTTRAFFIC_CLIENT_SECRET:-change-me-in-production}
+      SMARTTRAFFIC_JWT_SECRET: ${SMARTTRAFFIC_JWT_SECRET:-change-me-to-a-long-random-secret}
+    ports:
+      - "8081:8081"
+    networks: [auth]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  traffic-processor:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: smarttraffic-processor/Dockerfile
+    depends_on: [kafka, rabbitmq, postgres, auth-server]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_USER: ${KAFKA_USER:-smarttraffic}
+      KAFKA_PASSWORD: ${KAFKA_PASSWORD:-change-me-in-production}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-smarttraffic}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-in-production}
+      RABBITMQ_VHOST: smarttraffic
+      SERVER_PORT: 8080
+    ports:
+      - "8080:8080"
+    networks: [auth, data]
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+
+  traffic-sensor:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: traffic-sensor-simulator/Dockerfile
+    depends_on: [kafka]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_USER: ${KAFKA_USER:-smarttraffic}
+      KAFKA_PASSWORD: ${KAFKA_PASSWORD:-change-me-in-production}
+    networks: [data]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  traffic-archiver:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: traffic-archiver/Dockerfile
+    depends_on: [kafka, postgres]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: smarttraffic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+      KAFKA_USER: ${KAFKA_USER:-smarttraffic}
+      KAFKA_PASSWORD: ${KAFKA_PASSWORD:-change-me-in-production}
+    networks: [data]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+
+  app-gateway:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: app-gateway/Dockerfile
+    depends_on: [rabbitmq]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-smarttraffic}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-in-production}
+      RABBITMQ_VHOST: smarttraffic
+      SERVER_PORT: 8082
+    ports:
+      - "8082:8082"
+    networks: [data]
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+
+networks:
+  auth:
+    internal: true
+  data:
+    internal: true
+
+volumes:
+  postgres-data:
+  rabbitmq-data:

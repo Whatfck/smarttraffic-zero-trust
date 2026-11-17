@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: traffic-density-processor
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      properties:
+        security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}
+        sasl.mechanism: PLAIN
+        sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USER:smarttraffic}" password="${KAFKA_PASSWORD:change-me-in-production}";
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:smarttraffic}
+    password: ${RABBITMQ_PASSWORD:change-me-in-production}
+    virtual-host: ${RABBITMQ_VHOST:smarttraffic}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          secret-key: ${SMARTTRAFFIC_JWT_SECRET:change-me-to-a-long-random-secret}
+server:
+  port: ${SERVER_PORT:8080}
+smarttraffic:
+  rabbit:
+    exchange: traffic_updates
+  kafka:
+    raw-topic: raw_traffic_data
+    group-id: traffic-density-processor

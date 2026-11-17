@@ -1,0 +1,29 @@
+---
+- name: Provision SmartTraffic zero-trust zones
+  hosts: all
+  become: true
+  vars:
+    project_dir: /opt/smarttraffic
+  tasks:
+    - name: Install runtime packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-plugin
+          - nftables
+        update_cache: true
+        state: present
+    - name: Enable Docker
+      ansible.builtin.service:
+        name: docker
+        enabled: true
+        state: started
+    - name: Apply zone firewall
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/nftables/{{ inventory_hostname }}.nft"
+        dest: /etc/nftables.d/smarttraffic.nft
+        mode: "0644"
+      notify: Reload nftables
+  handlers:
+    - name: Reload nftables
+      ansible.builtin.command: nft -f /etc/nftables.d/smarttraffic.nft

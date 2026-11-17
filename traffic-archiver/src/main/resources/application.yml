@@ -1,0 +1,13 @@
+spring:
+  application.name: traffic-archiver
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer.properties.security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}
+    consumer.properties.sasl.mechanism: PLAIN
+    consumer.properties.sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USER:smarttraffic}" password="${KAFKA_PASSWORD:change-me-in-production}";
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:5432/${POSTGRES_DB:smarttraffic}
+    username: ${POSTGRES_USER:smarttraffic}
+    password: ${POSTGRES_PASSWORD:change-me-in-production}
+  jpa.hibernate.ddl-auto: update
+smarttraffic.kafka.raw-topic: raw_traffic_data
