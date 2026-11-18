@@ -20,10 +20,13 @@
     </properties>
     <modules>
         <module>smarttraffic-domain</module>
-        <module>traffic-sensor-simulator</module>
-        <module>smarttraffic-processor</module>
-        <module>traffic-archiver</module>
-        <module>app-gateway</module>
+        <module>smarttraffic-security</module>
         <module>auth-server</module>
+        <module>traffic-sensor-simulator</module>
+        <module>traffic-density-processor</module>
+        <module>traffic-archiver</module>
+        <module>user-dashboard-backend</module>
+        <module>alert-dispatcher</module>
+        <module>query-client</module>
     </modules>
 </project>

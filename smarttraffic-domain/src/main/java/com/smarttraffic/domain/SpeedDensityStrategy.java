@@ -1,5 +1,6 @@
 package com.smarttraffic.domain;
 
+/** Densidad inversa a la velocidad: 1 - velocidad / velocidad de flujo libre. */
 public final class SpeedDensityStrategy implements TrafficDensityStrategy {
     private final double freeFlowSpeed;
 
@@ -12,6 +13,6 @@ public final class SpeedDensityStrategy implements TrafficDensityStrategy {
 
     @Override
     public double calculate(TrafficReading reading) {
-        return Math.min(1.0, Math.max(0.0, 1.0 - reading.averageSpeed() / freeFlowSpeed));
+        return 1.0 - reading.averageSpeed() / freeFlowSpeed;
     }
 }

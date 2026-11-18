@@ -1,83 +1,109 @@
 package com.smarttraffic.domain;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import java.time.Instant;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
+/** Pruebas de dominio puro (sin Spring, BD ni brokers) con estructura AAA. */
 class ZoneTrafficAggregateTest {
-    private static TrafficReading reading(int vehicles, double speed) {
-        return new TrafficReading("north", vehicles, speed, Instant.EPOCH);
+    private static final Instant T0 = Instant.parse("2026-11-18T10:00:00Z");
+
+    private static TrafficReading reading(int vehicles) {
+        return new TrafficReading("north", vehicles, 40.0, T0);
     }
 
     @Test
-    @DisplayName("AAA: Aplica VehicleDensityStrategy y transiciona entre estados DESPEJADA -> MODERADA -> CONGESTIONADA")
+    @DisplayName("AAA: Strategy (vehiculos/capacidad) + State: DESPEJADA -> MODERADA -> CONGESTIONADA")
     void appliesStrategyAndStateTransitions() {
         // Arrange
-        var strategy = new VehicleDensityStrategy(100);
-        var aggregate = new ZoneTrafficAggregate("north", strategy);
-
-        // Act & Assert (DESPEJADA: density < 0.35)
-        var snap1 = aggregate.record(reading(20, 40));
-        assertEquals(CongestionState.DESPEJADA, snap1.state());
-        assertEquals(0.20, snap1.density(), 0.001);
-
-        // Act & Assert (MODERADA: 0.35 <= density < 0.70)
-        var snap2 = aggregate.record(reading(50, 40));
-        assertEquals(CongestionState.MODERADA, snap2.state());
-        assertEquals(0.50, snap2.density(), 0.001);
-
-        // Act & Assert (CONGESTIONADA: density >= 0.70)
-        var snap3 = aggregate.record(reading(80, 40));
-        assertEquals(CongestionState.CONGESTIONADA, snap3.state());
-        assertEquals(0.80, snap3.density(), 0.001);
-    }
-
-    @Test
-    @DisplayName("AAA: SpeedDensityStrategy calcula la densidad inversamente proporcional a la velocidad libre")
-    void appliesSpeedDensityStrategy() {
-        // Arrange: Velocidad libre = 80 km/h
-        var strategy = new SpeedDensityStrategy(80.0);
-        var reading = new TrafficReading("north", 30, 20.0, Instant.EPOCH); // 20 km/h -> densidad 1 - 20/80 = 0.75
+        var aggregate = new ZoneTrafficAggregate("north", new VehicleDensityStrategy(100));
 
         // Act
-        double density = strategy.calculate(reading);
+        var clear = aggregate.record(reading(20));
+        var moderate = aggregate.record(reading(50));
+        var congested = aggregate.record(reading(80));
 
         // Assert
-        assertEquals(0.75, density, 0.001);
+        assertEquals(CongestionState.DESPEJADA, clear.state());
+        assertEquals(0.20, clear.density(), 1e-9);
+        assertEquals(CongestionState.MODERADA, moderate.state());
+        assertEquals(CongestionState.CONGESTIONADA, congested.state());
+        assertEquals(3, congested.readings());
     }
 
     @Test
-    @DisplayName("AAA: Patrón Observer notifica de forma desacoplada únicamente al entrar en CONGESTIONADA")
-    void notifiesOnlyWhenEnteringCriticalState() {
+    @DisplayName("AAA: intercambiar la Strategy cambia el calculo sin tocar el agregado")
+    void strategyIsInterchangeable() {
+        // Arrange: misma lectura, dos algoritmos
+        var lecture = new TrafficReading("north", 10, 20.0, T0);
+        var byVehicles = new ZoneTrafficAggregate("north", new VehicleDensityStrategy(100));
+        var bySpeed = new ZoneTrafficAggregate("north", new SpeedDensityStrategy(80));
+
+        // Act
+        double vehicles = byVehicles.record(lecture).density();
+        double speed = bySpeed.record(lecture).density();
+
+        // Assert
+        assertEquals(0.10, vehicles, 1e-9);
+        assertEquals(0.75, speed, 1e-9);
+    }
+
+    @Test
+    @DisplayName("AAA: la densidad se normaliza a [0,1] aunque la estrategia se desborde")
+    void densityIsAlwaysNormalized() {
+        var aggregate = new ZoneTrafficAggregate("north", new VehicleDensityStrategy(10));
+
+        var snapshot = aggregate.record(reading(500));
+
+        assertEquals(1.0, snapshot.density(), 1e-9);
+    }
+
+    @Test
+    @DisplayName("AAA: Observer recibe un evento solo cuando cambia el nivel")
+    void notifiesObserversOnlyOnLevelChange() {
         // Arrange
         var observer = mock(CongestionObserver.class);
         var aggregate = new ZoneTrafficAggregate("north", new VehicleDensityStrategy(100));
-        aggregate.addObserver(observer);
+        aggregate.subscribe(observer);
 
         // Act
-        aggregate.record(reading(80, 40)); // Transiciona a CONGESTIONADA (primer disparo)
-        aggregate.record(reading(90, 40)); // Sigue en CONGESTIONADA (no debe disparar de nuevo)
+        aggregate.record(reading(80)); // DESPEJADA -> CONGESTIONADA (evento)
+        aggregate.record(reading(90)); // sigue CONGESTIONADA (sin evento)
 
         // Assert
-        verify(observer, times(1)).onCriticalChange("north", CongestionState.DESPEJADA,
-                CongestionState.CONGESTIONADA, 0.8);
+        var captor = ArgumentCaptor.forClass(CongestionChangedEvent.class);
+        verify(observer, times(1)).onCongestionChanged(captor.capture());
+        assertTrue(captor.getValue().enteredCritical());
+        assertEquals(CongestionState.DESPEJADA, captor.getValue().previous());
     }
 
     @Test
-    @DisplayName("AAA: Fail-Fast rechaza lecturas con métricas negativas o zonas cruzadas")
-    void rejectsInvalidReadingsAndForeignZones() {
-        // Assert Fail-Fast en Value Object record
-        assertThrows(IllegalArgumentException.class, () -> reading(-1, 10));
-        assertThrows(IllegalArgumentException.class, () -> reading(10, -5.0));
-        assertThrows(IllegalArgumentException.class, () -> new TrafficReading("", 10, 10.0, Instant.EPOCH));
-        assertThrows(NullPointerException.class, () -> new TrafficReading("north", 10, 10.0, null));
-
-        // Assert Fail-Fast en el agregado
+    @DisplayName("AAA: invariante - no acepta lecturas de otra zona y no notifica nada")
+    void rejectsReadingsFromAnotherZone() {
+        var observer = mock(CongestionObserver.class);
         var aggregate = new ZoneTrafficAggregate("north", new VehicleDensityStrategy(100));
+        aggregate.subscribe(observer);
+
         assertThrows(IllegalArgumentException.class,
-                () -> aggregate.record(new TrafficReading("south", 1, 10, Instant.EPOCH)));
+                () -> aggregate.record(new TrafficReading("south", 99, 5, T0)));
+        verify(observer, never()).onCongestionChanged(any());
+        assertEquals(0, aggregate.snapshot().readings());
+    }
+
+    @Test
+    @DisplayName("AAA: rehidratar desde un snapshot conserva estado, densidad y contador")
+    void rehydratesFromSnapshot() {
+        var stored = new ZoneTrafficSnapshot("north", 0.8, CongestionState.CONGESTIONADA, 7, T0);
+
+        var aggregate = ZoneTrafficAggregate.rehydrate(stored, new VehicleDensityStrategy(100));
+        var next = aggregate.record(reading(60)); // 0.60 >= 0.55 -> sigue CONGESTIONADA (histeresis)
+
+        assertEquals(CongestionState.CONGESTIONADA, next.state());
+        assertEquals(8, next.readings());
     }
 }

@@ -1,5 +1,6 @@
 package com.smarttraffic.domain;
 
+/** Densidad = vehiculos observados / capacidad de la via. */
 public final class VehicleDensityStrategy implements TrafficDensityStrategy {
     private final double roadCapacity;
 
@@ -12,6 +13,6 @@ public final class VehicleDensityStrategy implements TrafficDensityStrategy {
 
     @Override
     public double calculate(TrafficReading reading) {
-        return Math.min(1.0, reading.vehicles() / roadCapacity);
+        return reading.vehicles() / roadCapacity;
     }
 }

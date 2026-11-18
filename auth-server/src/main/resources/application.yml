@@ -3,3 +3,74 @@ spring:
     name: auth-server
 server:
   port: ${SERVER_PORT:8081}
+
+smarttraffic:
+  auth:
+    issuer: ${AUTH_ISSUER:http://localhost:8081}
+    token-ttl-seconds: ${TOKEN_TTL_SECONDS:300}
+    key-dir: ${AUTH_KEY_DIR:./keys}
+
+  # Identidades de servicio (minimo privilegio). Cada una recibe SOLO las
+  # audiencias y scopes que necesita. Formato de scopes RabbitMQ:
+  #   rabbitmq.<configure|read|write>:<vhost>/<recurso>
+  clients:
+    traffic-sensor-simulator:
+      secret: ${SENSOR_CLIENT_SECRET}
+      audiences: [kafka]
+      scopes: [kafka, traffic.write]
+      roles: [SENSOR]
+
+    traffic-density-processor:
+      secret: ${PROCESSOR_CLIENT_SECRET}
+      audiences: [kafka, rabbitmq]
+      scopes:
+        - kafka
+        - traffic.read
+        - rabbitmq.configure:smarttraffic/traffic_updates
+        - rabbitmq.write:smarttraffic/traffic_updates
+      roles: [PROCESSOR]
+
+    traffic-archiver:
+      secret: ${ARCHIVER_CLIENT_SECRET}
+      audiences: [kafka]
+      scopes: [kafka, traffic.read]
+      roles: [ARCHIVER]
+
+    user-dashboard-backend:
+      secret: ${DASHBOARD_CLIENT_SECRET}
+      audiences: [rabbitmq]
+      scopes:
+        - rabbitmq.configure:smarttraffic/traffic_updates
+        - rabbitmq.read:smarttraffic/traffic_updates
+        - rabbitmq.configure:smarttraffic/dashboard.*
+        - rabbitmq.write:smarttraffic/dashboard.*
+        - rabbitmq.read:smarttraffic/dashboard.*
+      roles: [DASHBOARD]
+
+    alert-dispatcher:
+      secret: ${ALERT_CLIENT_SECRET}
+      audiences: [rabbitmq]
+      scopes:
+        - rabbitmq.configure:smarttraffic/traffic_updates
+        - rabbitmq.read:smarttraffic/traffic_updates
+        - rabbitmq.configure:smarttraffic/alert_dispatcher.*
+        - rabbitmq.write:smarttraffic/alert_dispatcher.*
+        - rabbitmq.read:smarttraffic/alert_dispatcher.*
+        - rabbitmq.configure:smarttraffic/query_traffic_queue
+        - rabbitmq.read:smarttraffic/query_traffic_queue
+        - rabbitmq.configure:smarttraffic/query_answers
+        - rabbitmq.write:smarttraffic/query_answers
+      roles: [ALERTS]
+
+    query-client:
+      secret: ${QUERY_CLIENT_SECRET}
+      audiences: [rabbitmq]
+      scopes:
+        - rabbitmq.configure:smarttraffic/query_traffic_queue
+        - rabbitmq.write:smarttraffic/amq.default
+        - rabbitmq.configure:smarttraffic/query_answers
+        - rabbitmq.read:smarttraffic/query_answers
+        - rabbitmq.configure:smarttraffic/query_client.*
+        - rabbitmq.write:smarttraffic/query_client.*
+        - rabbitmq.read:smarttraffic/query_client.*
+      roles: [QUERY_CLIENT]
