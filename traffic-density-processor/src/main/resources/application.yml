@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: traffic-density-processor
+  main:
+    web-application-type: none
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+  # --- Kafka (vm-data) autenticado con SASL/OAUTHBEARER --------------------------
+  # El cliente pide un JWT al auth_server (client_credentials) ANTES de conectar y lo
+  # presenta al broker, que verifica la firma con el JWKS de vm-auth. Sin token valido
+  # no hay conexion (no existe acceso anonimo). Aplica a consumer, producer y streams.
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}
+      sasl.mechanism: OAUTHBEARER
+      sasl.oauthbearer.token.endpoint.url: ${smarttraffic.identity.token-endpoint}
+      sasl.login.callback.handler.class: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler
+      sasl.jaas.config: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required clientId="${smarttraffic.identity.client-id}" clientSecret="${smarttraffic.identity.client-secret}";
+    streams:
+      application-id: traffic-density-processor
+      properties:
+        commit.interval.ms: 1000
+        statestore.cache.max.bytes: 0
+        default.deserialization.exception.handler: org.apache.kafka.streams.errors.LogAndContinueExceptionHandler
+
+  # --- RabbitMQ (vm-data) autenticado con OAuth2 (JWT) -------------------------
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    virtual-host: smarttraffic
+
+smarttraffic:
+  identity:
+    token-endpoint: ${AUTH_SERVER_URL:http://localhost:8081}/token
+    client-id: traffic-density-processor
+    client-secret: ${PROCESSOR_CLIENT_SECRET}
+  kafka:
+    raw-topic: raw_traffic_data
+  rabbit:
+    updates-exchange: traffic_updates
+  density:
+    strategy: ${DENSITY_STRATEGY:weighted}
+    road-capacity: 100
+    free-flow-speed: 70
