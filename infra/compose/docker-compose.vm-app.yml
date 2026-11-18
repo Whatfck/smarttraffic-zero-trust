@@ -1,0 +1,25 @@
+services:
+  app-gateway:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: app-gateway/Dockerfile
+    environment:
+      AUTH_SERVER_URL: http://10.10.2.10:8081
+      RABBITMQ_HOST: 10.10.6.10
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-smarttraffic}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-in-production}
+      RABBITMQ_VHOST: smarttraffic
+      SMARTTRAFFIC_CLIENT_ID: smarttraffic
+      SMARTTRAFFIC_CLIENT_SECRET: ${SMARTTRAFFIC_CLIENT_SECRET:-change-me-in-production}
+      SERVER_PORT: 8082
+    ports:
+      - "8082:8082"
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+    restart: unless-stopped

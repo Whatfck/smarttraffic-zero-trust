@@ -28,6 +28,10 @@ Vagrant.configure("2") do |config|
           cp /opt/smarttraffic/infra/nftables/#{name}.nft /etc/nftables.d/smarttraffic.nft
           nft -f /etc/nftables.d/smarttraffic.nft
         fi
+        if [ -f /opt/smarttraffic/infra/compose/docker-compose.#{name}.yml ]; then
+          cd /opt/smarttraffic
+          docker compose -f /opt/smarttraffic/infra/compose/docker-compose.#{name}.yml up -d
+        fi
       SHELL
     end
   end

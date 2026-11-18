@@ -1,17 +1,22 @@
 #!/usr/sbin/nft -f
 flush ruleset
+
 table inet filter {
   chain input {
     type filter hook input priority filter; policy drop;
     iif "lo" accept
     ct state established,related accept
-    tcp dport 8080 accept
+    tcp dport 22 accept
+    # Permitir puerto del WebSocket y API del Dashboard (8082) hacia clientes externos
+    tcp dport 8082 accept
   }
   chain output {
     type filter hook output priority filter; policy drop;
     oif "lo" accept
     ct state established,related accept
+    # Permitir puerto de Auth hacia vm-auth (10.10.2.0/24)
     ip daddr 10.10.2.0/24 tcp dport 8081 accept
-    ip daddr 10.10.4.0/24 tcp dport 5672 accept
+    # Permitir puerto 5672 hacia vm-data (10.10.6.0/24)
+    ip daddr 10.10.6.0/24 tcp dport 5672 accept
   }
 }

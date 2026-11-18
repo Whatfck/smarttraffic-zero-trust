@@ -1,0 +1,19 @@
+services:
+  auth-server:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: auth-server/Dockerfile
+    environment:
+      SMARTTRAFFIC_CLIENT_ID: smarttraffic
+      SMARTTRAFFIC_CLIENT_SECRET: ${SMARTTRAFFIC_CLIENT_SECRET:-change-me-in-production}
+      SMARTTRAFFIC_JWT_SECRET: ${SMARTTRAFFIC_JWT_SECRET:-change-me-to-a-long-random-secret}
+      SERVER_PORT: 8081
+    ports:
+      - "8081:8081"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    restart: unless-stopped

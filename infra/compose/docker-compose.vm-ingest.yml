@@ -1,0 +1,20 @@
+services:
+  traffic-sensor:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: traffic-sensor-simulator/Dockerfile
+    environment:
+      AUTH_SERVER_URL: http://10.10.2.10:8081
+      KAFKA_BOOTSTRAP_SERVERS: 10.10.6.10:9092
+      KAFKA_SECURITY_PROTOCOL: ${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
+      KAFKA_USER: ${KAFKA_USER:-smarttraffic}
+      KAFKA_PASSWORD: ${KAFKA_PASSWORD:-change-me-in-production}
+      SMARTTRAFFIC_CLIENT_ID: smarttraffic
+      SMARTTRAFFIC_CLIENT_SECRET: ${SMARTTRAFFIC_CLIENT_SECRET:-change-me-in-production}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+    restart: unless-stopped

@@ -1,12 +1,17 @@
 #!/usr/sbin/nft -f
 flush ruleset
+
 table inet filter {
   chain input {
     type filter hook input priority filter; policy drop;
     iif "lo" accept
     ct state established,related accept
-    ip saddr 10.10.3.0/24 tcp dport 9092 accept
+    tcp dport 22 accept
+    # Permitir puerto 9092 (Kafka) unicamente desde vm-ingest y vm-core
+    ip saddr { 10.10.3.0/24, 10.10.4.0/24 } tcp dport 9092 accept
+    # Permitir puerto 5672 (RabbitMQ) unicamente desde vm-core y vm-app
     ip saddr { 10.10.4.0/24, 10.10.5.0/24 } tcp dport 5672 accept
+    # Permitir puerto 5432 (PostgreSQL) unicamente desde vm-core (traffic_archiver)
     ip saddr 10.10.4.0/24 tcp dport 5432 accept
   }
   chain output {

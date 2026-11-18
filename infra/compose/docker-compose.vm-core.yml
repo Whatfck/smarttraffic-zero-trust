@@ -1,0 +1,52 @@
+services:
+  traffic-processor:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: smarttraffic-processor/Dockerfile
+    environment:
+      AUTH_SERVER_URL: http://10.10.2.10:8081
+      KAFKA_BOOTSTRAP_SERVERS: 10.10.6.10:9092
+      KAFKA_SECURITY_PROTOCOL: ${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
+      KAFKA_USER: ${KAFKA_USER:-smarttraffic}
+      KAFKA_PASSWORD: ${KAFKA_PASSWORD:-change-me-in-production}
+      RABBITMQ_HOST: 10.10.6.10
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-smarttraffic}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-in-production}
+      RABBITMQ_VHOST: smarttraffic
+      SMARTTRAFFIC_CLIENT_ID: smarttraffic
+      SMARTTRAFFIC_CLIENT_SECRET: ${SMARTTRAFFIC_CLIENT_SECRET:-change-me-in-production}
+      SMARTTRAFFIC_JWT_SECRET: ${SMARTTRAFFIC_JWT_SECRET:-change-me-to-a-long-random-secret}
+      SERVER_PORT: 8080
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 512M
+    restart: unless-stopped
+
+  traffic-archiver:
+    platform: linux/amd64
+    build:
+      context: ../..
+      dockerfile: traffic-archiver/Dockerfile
+    environment:
+      AUTH_SERVER_URL: http://10.10.2.10:8081
+      KAFKA_BOOTSTRAP_SERVERS: 10.10.6.10:9092
+      KAFKA_SECURITY_PROTOCOL: ${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}
+      KAFKA_USER: ${KAFKA_USER:-smarttraffic}
+      KAFKA_PASSWORD: ${KAFKA_PASSWORD:-change-me-in-production}
+      POSTGRES_HOST: 10.10.6.10
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: smarttraffic
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+      SMARTTRAFFIC_CLIENT_ID: smarttraffic
+      SMARTTRAFFIC_CLIENT_SECRET: ${SMARTTRAFFIC_CLIENT_SECRET:-change-me-in-production}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+    restart: unless-stopped

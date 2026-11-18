@@ -1,13 +1,214 @@
 <!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><title>SmartTraffic Dashboard</title>
-<style>body{font:16px system-ui;max-width:760px;margin:3rem auto;background:#101827;color:#e5e7eb}section{padding:1rem;border:1px solid #334155;border-radius:8px}#state{font-size:2rem;color:#38bdf8}</style>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SmartTraffic - Zero Trust Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --blue: #38bdf8;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 960px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    h1 { margin: 0; font-size: 1.6rem; color: var(--blue); }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .status-connected { background: rgba(34, 197, 94, 0.2); color: var(--green); border: 1px solid var(--green); }
+    .status-disconnected { background: rgba(239, 68, 68, 0.2); color: var(--red); border: 1px solid var(--red); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    .zone-title { font-size: 1.1rem; font-weight: bold; margin-bottom: 0.5rem; }
+    .state-badge {
+      font-size: 1.2rem;
+      font-weight: bold;
+      display: inline-block;
+      padding: 0.3rem 0.8rem;
+      border-radius: 6px;
+      margin: 0.5rem 0;
+    }
+    .state-DESPEJADA { background: #14532d; color: #4ade80; border: 1px solid #22c55e; }
+    .state-MODERADA { background: #713f12; color: #fde047; border: 1px solid #eab308; }
+    .state-CONGESTIONADA { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
+    .meter {
+      height: 10px;
+      background: #334155;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 0.5rem;
+    }
+    .meter-fill { height: 100%; transition: width 0.4s ease; }
+    pre {
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      max-height: 220px;
+      overflow-y: auto;
+      color: #cbd5e1;
+    }
+    .alert-box {
+      border-left: 4px solid var(--red);
+      background: rgba(239, 68, 68, 0.1);
+      padding: 0.75rem;
+      border-radius: 0 6px 6px 0;
+      margin-bottom: 1rem;
+      display: none;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
 </head>
-<body><h1>SmartTraffic / Zero Trust</h1><section><p>Estado de la zona norte</p><strong id="state">Conectando...</strong><pre id="payload"></pre></section>
-<script>
-const state = document.querySelector('#state'), payload = document.querySelector('#payload');
-fetch('http://localhost:8080/api/traffic/readings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({zoneId:'north',vehicles:78,averageSpeed:18})})
-  .then(r=>r.json()).then(data=>{state.textContent=data.state; payload.textContent=JSON.stringify(data,null,2);})
-  .catch(error=>{state.textContent='Servicio no disponible'; payload.textContent=error.message;});
-</script></body>
+<body>
+
+  <header>
+    <div>
+      <h1>SmartTraffic Zero Trust</h1>
+      <small style="color:var(--muted)">vm-app / user_dashboard_backend (WebSocket STOMP)</small>
+    </div>
+    <span id="wsStatus" class="badge status-disconnected">WebSocket Desconectado</span>
+  </header>
+
+  <div id="alertBox" class="alert-box">
+    <strong>⚠️ ALERTA CRÍTICA:</strong> <span id="alertMsg">Congestión detectada</span>
+  </div>
+
+  <section class="grid" id="zonesContainer">
+    <div class="card" id="card-north">
+      <div class="zone-title">Zona Norte (north)</div>
+      <div id="badge-north" class="state-badge state-DESPEJADA">DESPEJADA</div>
+      <p style="margin:0; font-size:0.9rem; color:var(--muted)">Densidad: <span id="density-north">0.0%</span></p>
+      <div class="meter"><div id="meter-north" class="meter-fill" style="width: 0%; background: var(--green);"></div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Últimos Eventos en Tiempo Real (/topic/traffic)</h3>
+    <pre id="logStream">// Esperando eventos desde RabbitMQ Fanout vía WebSocket...</pre>
+  </section>
+
+  <script>
+    const wsStatus = document.getElementById('wsStatus');
+    const logStream = document.getElementById('logStream');
+    const alertBox = document.getElementById('alertBox');
+    const alertMsg = document.getElementById('alertMsg');
+    const zonesContainer = document.getElementById('zonesContainer');
+
+    const gatewayUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:8082'
+      : `http://${window.location.hostname}:8082`;
+
+    function updateZoneCard(snapshot) {
+      const zoneId = snapshot.zoneId;
+      let card = document.getElementById(`card-${zoneId}`);
+      if (!card) {
+        card = document.createElement('div');
+        card.className = 'card';
+        card.id = `card-${zoneId}`;
+        card.innerHTML = `
+          <div class="zone-title">Zona: ${zoneId}</div>
+          <div id="badge-${zoneId}" class="state-badge">...</div>
+          <p style="margin:0; font-size:0.9rem; color:var(--muted)">Densidad: <span id="density-${zoneId}">0%</span></p>
+          <div class="meter"><div id="meter-${zoneId}" class="meter-fill" style="width: 0%;"></div></div>
+        `;
+        zonesContainer.appendChild(card);
+      }
+
+      const badge = document.getElementById(`badge-${zoneId}`);
+      const densitySpan = document.getElementById(`density-${zoneId}`);
+      const meterFill = document.getElementById(`meter-${zoneId}`);
+
+      const state = snapshot.state || 'DESPEJADA';
+      const pct = Math.round((snapshot.density || 0) * 100);
+
+      badge.textContent = state;
+      badge.className = `state-badge state-${state}`;
+      densitySpan.textContent = `${pct}%`;
+      meterFill.style.width = `${pct}%`;
+
+      if (state === 'CONGESTIONADA') {
+        meterFill.style.background = 'var(--red)';
+        alertBox.style.display = 'block';
+        alertMsg.textContent = `La zona '${zoneId}' ha entrado en estado CONGESTIONADA (${pct}% saturación).`;
+      } else if (state === 'MODERADA') {
+        meterFill.style.background = 'var(--yellow)';
+      } else {
+        meterFill.style.background = 'var(--green)';
+      }
+    }
+
+    function connectWebSocket() {
+      try {
+        const socket = (typeof SockJS !== 'undefined')
+          ? new SockJS(`${gatewayUrl}/ws`)
+          : new WebSocket(`ws://${window.location.hostname || 'localhost'}:8082/ws`);
+
+        const stompClient = (typeof Stomp !== 'undefined')
+          ? Stomp.over(socket)
+          : null;
+
+        if (stompClient) {
+          stompClient.debug = () => {}; // silenciar logs verbose
+          stompClient.connect({}, function (frame) {
+            wsStatus.textContent = 'WebSocket Conectado (:8082)';
+            wsStatus.className = 'badge status-connected';
+
+            stompClient.subscribe('/topic/traffic', function (message) {
+              const snapshot = JSON.parse(message.body);
+              updateZoneCard(snapshot);
+              const timestamp = new Date().toLocaleTimeString();
+              logStream.textContent = `[${timestamp}] ${JSON.stringify(snapshot)}\n` + logStream.textContent.substring(0, 3000);
+            });
+          }, function (error) {
+            wsStatus.textContent = 'Error WebSocket - Reintentando...';
+            wsStatus.className = 'badge status-disconnected';
+            setTimeout(connectWebSocket, 4000);
+          });
+        }
+      } catch (err) {
+        wsStatus.textContent = 'Fallo conexión WebSocket';
+        wsStatus.className = 'badge status-disconnected';
+      }
+    }
+
+    connectWebSocket();
+  </script>
+</body>
 </html>

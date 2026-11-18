@@ -1,12 +1,20 @@
 #!/usr/sbin/nft -f
 flush ruleset
+
 table inet filter {
-  chain input { type filter hook input priority filter; policy drop; iif "lo" accept; ct state established,related accept; }
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iif "lo" accept
+    ct state established,related accept
+    tcp dport 22 accept
+  }
   chain output {
     type filter hook output priority filter; policy drop;
     oif "lo" accept
     ct state established,related accept
+    # Permitir puerto de Auth hacia vm-auth (10.10.2.0/24)
     ip daddr 10.10.2.0/24 tcp dport 8081 accept
-    ip daddr 10.10.4.0/24 tcp dport { 9092, 5672, 5432 } accept
+    # Permitir puertos 9092 (Kafka), 5672 (RabbitMQ) y 5432 (PostgreSQL) hacia vm-data (10.10.6.0/24)
+    ip daddr 10.10.6.0/24 tcp dport { 9092, 5672, 5432 } accept
   }
 }
