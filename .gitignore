@@ -6,3 +6,6 @@ target/
 *.log
 .idea/
 .vscode/
+.images/
+.mvn-repo/*
+!.mvn-repo/.gitkeep

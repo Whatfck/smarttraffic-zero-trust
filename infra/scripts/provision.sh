@@ -64,12 +64,46 @@ KAFKA_BROKER_CLIENT_SECRET=$(rnd)
 EOF
 fi
 
+# --- Cache compartida de imagenes base (red lenta) ----------------------------
+# La primera VM que descarga una imagen la guarda en .images/ (carpeta sincronizada)
+# y las demas la cargan desde alli en vez de volver a bajarla de Internet.
+IMAGES_DIR="$PROJECT_DIR/.images"
+mkdir -p "$IMAGES_DIR" "$PROJECT_DIR/.mvn-repo"
+cached_image() {
+  local image="$1" file
+  file="$IMAGES_DIR/$(echo "$image" | tr '/:' '__').tar"
+  docker image inspect "$image" >/dev/null 2>&1 && return 0
+  if [ -s "$file" ]; then
+    log "Cargando $image desde cache local"
+    docker load -i "$file" >/dev/null
+  else
+    log "Descargando $image"
+    docker pull -q "$image" >/dev/null
+    docker save -o "$file.$ZONE.tmp" "$image" && mv -f "$file.$ZONE.tmp" "$file"
+  fi
+}
+if [ -f "$COMPOSE_FILE" ]; then
+  if grep -q "dockerfile:" "$COMPOSE_FILE"; then
+    cached_image maven:3.9.6-eclipse-temurin-17-alpine
+    cached_image eclipse-temurin:17-jre-alpine
+  fi
+  for image in $(grep -E '^\s+image: [a-z]' "$COMPOSE_FILE" | awk '{print $2}' | grep -v '^smarttraffic/'); do
+    cached_image "$image"
+  done
+fi
+
 # --- 3. Compilar y arrancar los contenedores de la zona -----------------------
 if [ -f "$COMPOSE_FILE" ]; then
   log "Compilando y arrancando contenedores ($COMPOSE_FILE)..."
   cd "$PROJECT_DIR"
+  # Compilar de a una imagen: varias compilaciones Maven en paralelo agotan la RAM de la VM.
+  COMPOSE=(docker compose --project-name smarttraffic --env-file "$SECRETS_FILE" -f "$COMPOSE_FILE")
+  for service in $("${COMPOSE[@]}" config --services); do
+    log "Preparando imagen de $service..."
+    "${COMPOSE[@]}" build "$service"    # no-op para servicios que solo usan image:
+  done
   docker compose --project-name smarttraffic --env-file "$SECRETS_FILE" \
-    -f "$COMPOSE_FILE" up -d --build --remove-orphans
+    -f "$COMPOSE_FILE" up -d --remove-orphans
 else
   log "AVISO: no existe $COMPOSE_FILE"
 fi

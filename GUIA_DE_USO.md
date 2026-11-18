@@ -1,182 +1,125 @@
-# Guía de Uso y Demostración: SmartTraffic Zero Trust
+# Guía de uso y demostración: SmartTraffic Zero Trust
 
-Esta guía detalla paso a paso cómo compilar, ejecutar, probar y sustentar el sistema **SmartTraffic Zero Trust**. Está diseñada tanto para el desarrollo diario como para servir de guion durante la **evaluación presencial de 15 minutos**.
+Todo se levanta desde **un solo PC** (Windows, Linux o Mac Intel) con **VirtualBox + Vagrant**.
+Para la explicación de cada componente, ver [docs/SUSTENTACION.md](docs/SUSTENTACION.md).
 
----
+## 1. Requisitos
+- VirtualBox 7.x y Vagrant 2.4.x (en Windows: `winget install Oracle.VirtualBox` y `winget install Hashicorp.Vagrant`).
+- 16 GB de RAM (las 5 VMs usan unos 8.7 GB) y unos 25 GB de disco libre.
+- Internet **solo durante el primer `vagrant up`**: descarga la imagen Ubuntu, Docker, las imágenes base y las dependencias Maven.
+- Opcional, para correr las pruebas en el host: JDK 17+ y Maven 3.9.
 
-## 1. Modos de Ejecución
+| VM | IP | Contenedores |
+|---|---|---|
+| vm-auth | 192.168.56.10 | auth-server (8081) |
+| vm-data | 192.168.56.20 | zookeeper, kafka (9092), rabbitmq (5672), postgres-db (5432) |
+| vm-ingest | 192.168.56.30 | traffic-sensor-simulator |
+| vm-core | 192.168.56.40 | traffic-density-processor (x2), traffic-archiver |
+| vm-app | 192.168.56.50 | user-dashboard-backend (8082), alert-dispatcher, query-client (x3) |
 
-El sistema soporta dos modalidades de despliegue:
-
-| Modo | Caso de Uso | Requisitos |
-| :--- | :--- | :--- |
-| **Modo A: Multi-VM Distribuido (Vagrant)** | **Evaluación oficial / Rúbrica estricta** con 5 VMs aisladas y cortafuegos `nftables`. | Vagrant + VirtualBox |
-| **Modo B: Monolito Local (Docker Compose)** | Desarrollo rápido, pruebas de código y depuración sin levantar 5 máquinas virtuales. | Docker + Docker Compose |
-
----
-
-## 2. Preparación y Compilación de Pruebas Unitarias (TDD)
-
-Antes de levantar los contenedores, valida que todas las pruebas unitarias puras en memoria (AAA con JUnit 5 y Mockito) pasen al 100%:
-
-### Si tienes Maven en el host:
+## 2. Levantar todo
+Desde la raíz del repositorio:
 ```bash
-mvn clean test
+vagrant up            # crea y aprovisiona las 5 VMs en orden (la primera vez tarda bastante)
+vagrant status        # las 5 deben quedar "running"
 ```
+Cada VM ejecuta `infra/scripts/provision.sh`:
+1. Instala Docker y nftables.
+2. Compila las imágenes multietapa y arranca los contenedores.
+3. Aplica el firewall `default deny`.
 
-### Si no tienes Maven instalado en el host (vía Docker):
+Los secretos de cada servicio se generan solos la primera vez en `.secrets/smarttraffic.env`
+(está en `.gitignore`).
+
+Dashboard: **http://192.168.56.50:8082/dashboard.html**
+
+Comandos útiles:
 ```bash
-docker run --rm -v "$(pwd)":/app -w /app maven:3.9.6-eclipse-temurin-17-alpine mvn test
+vagrant provision vm-core   # volver a compilar y desplegar una zona tras cambiar código
+vagrant halt                # apagar todo (se conserva el estado)
+vagrant up                  # volver a encender (el firewall y los contenedores arrancan solos)
+vagrant destroy -f          # borrar las VMs
 ```
 
-> [!NOTE]
-> Estas pruebas se ejecutan en RAM en menos de 2 segundos sin abrir sockets, sin levantar bases de datos ni arrancar Spring Boot, certificando el aislamiento exigido en el README.
+## 3. Guion de demostración (unos 10 minutos)
 
----
-
-## 3. Despliegue en Modo A: Multi-VM Oficial (Vagrant + nftables)
-
-Este es el modo exigido por la rúbrica del proyecto.
-
-### Paso 1: Iniciar las 5 Máquinas Virtuales
-En la raíz del proyecto, ejecuta:
+### 3.1 Contenedores, límites de recursos y réplicas
 ```bash
-vagrant up
+vagrant ssh vm-core -c "docker compose -p smarttraffic ps"
+vagrant ssh vm-core -c "docker stats --no-stream"
+vagrant ssh vm-app  -c "docker compose -p smarttraffic ps"            # 3 query-client
+vagrant ssh vm-app  -c "docker exec smarttraffic-user-dashboard-backend-1 id"   # uid de appuser, no root
 ```
-Vagrant aprovisionará en orden:
-1. `vm-auth` (`10.10.2.10`): Instala `nftables`, aplica reglas y arranca `auth-server`.
-2. `vm-data` (`10.10.6.10`): Arranca Kafka, RabbitMQ y PostgreSQL.
-3. `vm-ingest` (`10.10.3.10`): Arranca el simulador de sensores.
-4. `vm-core` (`10.10.4.10`): Arranca el procesador de densidad y el archivador JPA.
-5. `vm-app` (`10.10.5.10`): Arranca el gateway con WebSocket y el despachador de alertas.
 
-### Paso 2: Verificar el estado de las VMs
+### 3.2 Firewall Zero Trust (nftables)
 ```bash
-vagrant status
+vagrant ssh vm-data -c "sudo nft list table inet smarttraffic"
+# Permitido: vm-core -> PostgreSQL
+vagrant ssh vm-core   -c "nc -zvw3 192.168.56.20 5432"
+# Bloqueado: vm-ingest -> PostgreSQL (timeout: lo descarta la politica drop)
+vagrant ssh vm-ingest -c "nc -zvw3 192.168.56.20 5432"
+# Bloqueado: vm-app -> Kafka
+vagrant ssh vm-app    -c "nc -zvw3 192.168.56.20 9092"
+# Los descartes quedan registrados en el kernel
+vagrant ssh vm-data   -c "sudo journalctl -k | grep ST-DROP | tail -5"
 ```
 
-### Paso 3: Probar la Seguridad Zero Trust (`nftables`)
-Para demostrar en la sustentación que la política `DROP` por defecto está activa y bloqueando tráfico no autorizado:
-
-#### A. Tráfico Autorizado (Debe conectar):
+### 3.3 Identidad de servicios (JWT)
 ```bash
-# vm-core puede conectar a PostgreSQL en vm-data (5432)
-vagrant ssh vm-core -c "nc -zvw3 10.10.6.10 5432"
-# Salida esperada: Connection to 10.10.6.10 5432 port [tcp/*] succeeded!
+# Clave publica que usan Kafka y RabbitMQ para verificar tokens
+vagrant ssh vm-core -c "curl -s http://192.168.56.10:8081/.well-known/jwks.json"
+# Sin credenciales validas, la Autoridad no emite token
+vagrant ssh vm-core -c "curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{\"clientId\":\"intruso\",\"clientSecret\":\"x\"}' http://192.168.56.10:8081/token"
+# Tokens emitidos a cada servicio
+vagrant ssh vm-auth -c "docker logs smarttraffic-auth-server-1 2>&1 | grep 'JWT issued' | tail -8"
 ```
-
-#### B. Tráfico Bloqueado / Hostil (Debe ser descartado silenciosamente por DROP):
+Para mostrar que **no hay acceso anónimo**, pruebe RabbitMQ con usuario y contraseña. Se rechaza
+porque el único backend es OAuth2:
 ```bash
-# vm-ingest INTENTA conectar a PostgreSQL en vm-data (NO AUTORIZADO)
-vagrant ssh vm-ingest -c "nc -zvw3 10.10.6.10 5432"
-# Salida esperada: Timeout / Connection timed out (Descartado por nftables)
+vagrant ssh vm-data -c "docker logs smarttraffic-rabbitmq-1 2>&1 | grep -iE 'oauth|refused' | tail -5"
 ```
 
-#### C. Inspeccionar las reglas del kernel:
+### 3.4 Flujo de datos
 ```bash
-vagrant ssh vm-data -c "sudo nft list ruleset"
+vagrant ssh vm-ingest -c "docker logs --tail 5 smarttraffic-traffic-sensor-simulator-1"
+vagrant ssh vm-core   -c "docker compose -p smarttraffic logs --tail 10 traffic-density-processor"
+vagrant ssh vm-app    -c "docker logs smarttraffic-alert-dispatcher-1 2>&1 | grep -E 'ALERTA|Answered' | tail -8"
+vagrant ssh vm-app    -c "docker compose -p smarttraffic logs --tail 6 query-client"
 ```
 
----
-
-## 4. Despliegue en Modo B: Desarrollo Rápido Local (Docker Compose)
-
-Si estás probando cambios locales sin máquinas virtuales:
-
+### 3.5 Persistencia en PostgreSQL
 ```bash
-# 1. Levantar toda la arquitectura localmente
-docker compose up -d
-
-# 2. Verificar que todos los servicios estén 'Up'
-docker compose ps
-
-# 3. Ver logs en tiempo real del flujo de datos
-docker compose logs -f traffic-sensor traffic-processor app-gateway
+vagrant ssh vm-data -c "docker exec smarttraffic-postgres-db-1 psql -U smarttraffic -c 'select zone_id, count(*) from traffic_readings group by zone_id;'"
+vagrant ssh vm-data -c "docker exec smarttraffic-postgres-db-1 psql -U smarttraffic -c 'select event_type, count(*) from audit_events group by event_type;'"
 ```
 
----
-
-## 5. Verificación de Componentes y Flujo de Datos
-
-### 1. Autenticación de Servicios (S2S Token Exchange)
-Prueba manual de solicitud de JWT al Servidor de Autoridad:
+### 3.6 Tolerancia a fallos (KTable)
 ```bash
-curl -X POST http://localhost:8081/token \
-  -H "Content-Type: application/json" \
-  -d '{"clientId":"smarttraffic","clientSecret":"change-me-in-production"}'
-```
-*Respuesta esperada:*
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiIsIn...",
-  "expiresIn": 900
-}
+vagrant ssh vm-core -c "docker stop smarttraffic-traffic-density-processor-1"
+# la replica 2 toma todas las particiones; el dashboard sigue actualizandose
+vagrant ssh vm-core -c "docker start smarttraffic-traffic-density-processor-1"
 ```
 
-### 2. Persistencia en Base de Datos (PostgreSQL)
-Verifica que las lecturas crudas se estén archivando de forma inmutable:
+### 3.7 Cambiar la Strategy sin tocar código
+Edite `DENSITY_STRATEGY` (`vehicle`, `speed` o `weighted`) en `infra/compose/docker-compose.vm-core.yml` y ejecute:
 ```bash
-docker exec -it $(docker ps -qf "name=postgres") psql -U smarttraffic -d smarttraffic -c \
-  "SELECT id, zone_id, vehicles, average_speed, observed_at FROM traffic_readings ORDER BY id DESC LIMIT 5;"
+vagrant ssh vm-core -c "cd /opt/smarttraffic && sudo docker compose -p smarttraffic --env-file .secrets/smarttraffic.env -f infra/compose/docker-compose.vm-core.yml up -d"
 ```
 
-### 3. Consultas Asíncronas RPC (RabbitMQ)
-Observa en los logs de `app-gateway` cómo el cliente de consultas (`QueryClientSimulator`) envía peticiones a `query_traffic_queue` y recibe respuestas correlacionadas desde `query_answers`:
+## 4. Pruebas unitarias
 ```bash
-docker compose logs -f app-gateway | grep -E "QueryClient|Answered async query"
+mvn test
 ```
-
-### 4. Consola de Administración de RabbitMQ
-* **URL:** `http://localhost:15672` (o `http://10.10.6.10:15672` en Modo A)
-* **Usuario:** `smarttraffic`
-* **Contraseña:** `change-me-in-production`
-* Podrás ver el Exchange Fanout `traffic_updates`, las colas `dashboard_updates`, `query_traffic_queue` y el Topic Exchange `query_answers`.
-
----
-
-## 6. Visualización Frontend en Tiempo Real (Dashboard)
-
-1. Abre el archivo [dashboard.html](file:///Users/daniel/Universidad/6to-semestre/sistemas-distribuidos/smarttraffic-zero-trust/dashboard.html) directamente en cualquier navegador web:
-   * En macOS por terminal:
-     ```bash
-     open dashboard.html
-     ```
-2. **Qué observar en la pantalla:**
-   * **Badge superior:** Cambiará a verde `"WebSocket Conectado (:8082)"` tan pronto se enlace con `user_dashboard_backend`.
-   * **Tarjetas por zona:** Muestran el identificador de la zona (`north`, `center`, `south`), la barra de porcentaje de saturación y el badge de estado:
-     * 🟢 `DESPEJADA` (< 35% de densidad).
-     * 🟡 `MODERADA` (35% a 70% de densidad).
-     * 🔴 `CONGESTIONADA` (≥ 70% de densidad).
-   * **Alerta Crítica:** Si una zona supera el umbral del 70%, el patrón *Observer* dispara la notificación y aparecerá un banner rojo de alerta crítica en el dashboard.
-   * **Consola de eventos:** Muestra el stream JSON en vivo de los mensajes recibidos desde RabbitMQ.
-
----
-
-## 7. Guion Sugerido para la Sustentación (15 Minutos)
-
-| Minuto | Tema | Qué mostrar / Qué decir |
-| :---: | :--- | :--- |
-| **00 - 03** | **Arquitectura y Justificación** | • Explicar por qué Kafka para ingesta de alto throughput en el edge y RabbitMQ para distribución Fanout/RPC.<br>• Mostrar el diagrama de 5 zonas de red en [comportamiento-esperado.md](file:///Users/daniel/Universidad/6to-semestre/sistemas-distribuidos/smarttraffic-zero-trust/comportamiento-esperado.md). |
-| **03 - 06** | **Demostración Zero Trust (nftables)** | • Abrir terminal en `vm-core` y mostrar que conecta a Postgres.<br>• Abrir terminal en `vm-ingest` y mostrar el *timeout* al intentar llegar a Postgres (DROP en acción).<br>• Mostrar el archivo `vm-data.nft`. |
-| **06 - 09** | **Flujo End-to-End y Frontend en Vivo** | • Abrir [dashboard.html](file:///Users/daniel/Universidad/6to-semestre/sistemas-distribuidos/smarttraffic-zero-trust/dashboard.html) con el WebSocket conectado.<br>• Ver las transiciones reactivas de color y la generación de alertas críticas en vivo. |
-| **09 - 12** | **POO Avanzada, Dominio y TDD** | • Mostrar en código el agregador `ZoneTrafficAggregate` (patrones *State*, *Strategy* y *Observer* sin condicionales anidados).<br>• Mostrar los Value Objects con `record` y validación *Fail-Fast*.<br>• Ejecutar `mvn test` demostrando la ejecución en milisegundos con Mockito. |
-| **12 - 14** | **Persistencia y Consultas RPC** | • Hacer `SELECT` en PostgreSQL mostrando las lecturas guardadas.<br>• Mostrar los logs del ciclo asíncrono RPC de `QueryClientSimulator` sobre RabbitMQ. |
-| **14 - 15** | **Conclusiones y Preguntas** | Responder preguntas del docente o evaluador. |
-
----
-
-## 8. Comandos Útiles para Limpieza y Reinicio
-
+Son 48 pruebas: dominio puro en memoria, servicios con Mockito y la KTable con `TopologyTestDriver`.
+Con JDK 21 o superior en el host, agregue `-Dnet.bytebuddy.experimental=true` si Mockito se queja.
+Sin Maven en el host:
 ```bash
-# Detener contenedores locales
-docker compose down
-
-# Detener contenedores y borrar volúmenes (reinicia la BD limpia)
-docker compose down -v
-
-# Suspender o apagar las VMs de Vagrant
-vagrant halt
-
-# Destruir completamente las VMs para volver a crearlas desde cero
-vagrant destroy -f
+docker run --rm -v "$PWD":/app -w /app maven:3.9.6-eclipse-temurin-17-alpine mvn -q test
 ```
+
+## 5. Problemas comunes
+- **Una VM tarda o falla al compilar por red:** ejecute `vagrant provision <vm>`. El script es idempotente.
+- **No abre el dashboard:** compruebe que `vm-app` esté arriba
+  (`vagrant ssh vm-app -c "docker compose -p smarttraffic ps"`) y use la IP 192.168.56.50.
+- **Kafka no acepta conexiones:** Kafka descarga el JWKS de vm-auth al arrancar, así que vm-auth
+  debe estar arriba primero. Ejecute `vagrant ssh vm-data -c "docker restart smarttraffic-kafka-1"`.

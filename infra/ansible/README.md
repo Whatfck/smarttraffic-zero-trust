@@ -1,12 +1,11 @@
-# Aprovisionamiento
+# Aprovisionamiento con Ansible (alternativa)
 
-`Vagrantfile` crea las cinco zonas privadas y aplica el firewall de cada zona.
-Para una instalación existente, `site.yml` instala Docker/nftables y aplica la
-regla correspondiente al hostname:
+La via principal es `vagrant up`. Para maquinas que ya existen, este playbook hace lo mismo
+ejecutando `infra/scripts/provision.sh <zona>` en cada host. El orden recomendado es
+vm-auth, vm-data, vm-ingest, vm-core y vm-app; el script genera los secretos compartidos en
+`.secrets/` la primera vez.
 
 ```bash
-ansible-playbook -i inventory site.yml
+ansible-playbook -i inventory.ini site.yml --limit vm-auth
+ansible-playbook -i inventory.ini site.yml --limit vm-data,vm-ingest,vm-core,vm-app
 ```
-
-El inventario debe declarar `vm-auth`, `vm-data`, `vm-ingest`, `vm-core` y
-`vm-app` con sus IPs privadas y credenciales SSH.

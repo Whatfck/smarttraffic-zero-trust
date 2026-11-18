@@ -1,5 +1,15 @@
 # smarttraffic-zero-trust
 
+> **Cómo ejecutarlo:** [GUIA_DE_USO.md](GUIA_DE_USO.md) (`vagrant up` levanta las 5 VMs) ·
+> **Cómo explicarlo:** [docs/SUSTENTACION.md](docs/SUSTENTACION.md) ·
+> **Pruebas:** `mvn test`
+>
+> Módulos: `smarttraffic-domain` (POO pura), `smarttraffic-security` (JWT hacia RabbitMQ),
+> `auth-server`, `traffic-sensor-simulator`, `traffic-density-processor`, `traffic-archiver`,
+> `user-dashboard-backend`, `alert-dispatcher`, `query-client` · Infra: `Vagrantfile`, `infra/`.
+
+---
+
 ## 11. Ejercicio: Reto de Infraestructura: SmartTraffic - Zona Cero (Zero Trust) con Java, Spring Boot, POO y Persistencia
 
 ### Resumen del Proyecto

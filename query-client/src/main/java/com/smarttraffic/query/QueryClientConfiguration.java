@@ -36,8 +36,13 @@ import org.springframework.stereotype.Component;
 public class QueryClientConfiguration {
 
     @Bean
-    ClientIdentity clientIdentity() throws Exception {
-        String host = InetAddress.getLocalHost().getHostName();
+    ClientIdentity clientIdentity() {
+        String host;
+        try {
+            host = InetAddress.getLocalHost().getHostName();
+        } catch (Exception unresolvable) {
+            host = "vm-app";
+        }
         return new ClientIdentity("qc-" + host + "-" + UUID.randomUUID().toString().substring(0, 4));
     }
 

@@ -11,6 +11,9 @@ WORKDIR /workspace
 
 # 1) Solo los pom.xml: esta capa (y la descarga de dependencias) queda en cache
 #    mientras no cambien las dependencias, aunque cambie el codigo fuente.
+# 0) Repositorio Maven semilla (opcional): si .mvn-repo trae dependencias ya
+#    descargadas, go-offline no necesita Internet. Si esta vacio, descarga normal.
+COPY .mvn-repo/ /root/.m2/repository/
 COPY pom.xml .
 COPY smarttraffic-domain/pom.xml smarttraffic-domain/pom.xml
 COPY smarttraffic-security/pom.xml smarttraffic-security/pom.xml

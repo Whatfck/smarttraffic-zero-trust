@@ -20,7 +20,7 @@ services:
       ALERT_CLIENT_SECRET: ${ALERT_CLIENT_SECRET:?}
       QUERY_CLIENT_SECRET: ${QUERY_CLIENT_SECRET:?}
     volumes:
-      - auth-keys:/app/data/keys    # la clave privada RSA persiste solo en vm-auth
+      - auth-data:/app/data    # la clave privada RSA persiste solo en vm-auth (volumen propiedad de appuser)
     deploy:
       resources:
         limits:
@@ -29,4 +29,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  auth-keys:
+  auth-data:
