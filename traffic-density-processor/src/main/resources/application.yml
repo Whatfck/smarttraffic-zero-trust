@@ -18,6 +18,9 @@ spring:
       sasl.mechanism: OAUTHBEARER
       sasl.oauthbearer.token.endpoint.url: ${smarttraffic.identity.token-endpoint}
       sasl.login.callback.handler.class: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler
+      # Renovar el JWT 60 s antes de que venza (el default de 300 s no deja margen)
+      sasl.login.refresh.buffer.seconds: 60
+      sasl.login.refresh.min.period.seconds: 30
       sasl.jaas.config: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required clientId="${smarttraffic.identity.client-id}" clientSecret="${smarttraffic.identity.client-secret}";
     streams:
       application-id: traffic-density-processor

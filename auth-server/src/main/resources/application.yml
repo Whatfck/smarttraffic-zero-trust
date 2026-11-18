@@ -7,7 +7,7 @@ server:
 smarttraffic:
   auth:
     issuer: ${AUTH_ISSUER:http://localhost:8081}
-    token-ttl-seconds: ${TOKEN_TTL_SECONDS:300}
+    token-ttl-seconds: ${TOKEN_TTL_SECONDS:900}
     key-dir: ${AUTH_KEY_DIR:./keys}
 
   # Identidades de servicio (minimo privilegio). Cada una recibe SOLO las
