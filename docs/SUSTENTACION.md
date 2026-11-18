@@ -85,7 +85,14 @@ Cada componente vive en su **propia VM**. Ninguna VM confía en otra:
 4. **RabbitMQ (`rabbitmq_auth_backend_oauth2`):** **no existen usuarios ni contraseñas**. El JWT es
    la credencial y sus *scopes* deciden qué puede hacer cada servicio:
    `rabbitmq.write:smarttraffic/traffic_updates`, por ejemplo, permite publicar en ese exchange y
-   nada más.
+   nada más. En el Topic `query_answers` también se autoriza la **routing key**: el
+   alert_dispatcher solo publica con `query.*` y cada query_client solo lee `query.qc-*`.
+   - **Clave fijada (key pinning):** RabbitMQ solo acepta descargar un JWKS por https. Por eso,
+     al aprovisionar vm-data se descarga la clave pública de vm-auth (`/.well-known/signing-key.pem`)
+     y se **fija** en el broker (`auth_oauth2.signing_keys.<kid>`). Así verifica firmas sin depender
+     de la red y nadie puede suplantar el servidor de claves.
+   - En la consola de RabbitMQ, las conexiones aparecen con el usuario **`sub` del token**
+     (por ejemplo `traffic-density-processor`): RabbitMQ no tiene ningún usuario configurado.
 5. **¿Por qué RS256 y JWKS?** La clave **privada** nunca sale de vm-auth. Los brokers solo tienen la
    **pública**, así que pueden verificar tokens pero no fabricarlos.
 
