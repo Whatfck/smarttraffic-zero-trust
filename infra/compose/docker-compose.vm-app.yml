@@ -1,25 +1,61 @@
+# =============================================================================
+# vm-app (Zona de Aplicacion - DMZ)
+#   user-dashboard-backend: unico puerto expuesto (8082): WebSocket + dashboard.html
+#   alert-dispatcher:       replica local + alertas (Observer) + respuestas a consultas
+#   query-client:           3 replicas para evidenciar consumo concurrente
+# =============================================================================
+name: smarttraffic
+x-rabbit-env: &rabbit-env
+  AUTH_SERVER_URL: http://192.168.56.10:8081
+  RABBITMQ_HOST: 192.168.56.20
+
 services:
-  app-gateway:
-    platform: linux/amd64
+  user-dashboard-backend:
     build:
       context: ../..
-      dockerfile: app-gateway/Dockerfile
+      dockerfile: user-dashboard-backend/Dockerfile
+    image: smarttraffic/user-dashboard-backend:latest
+    network_mode: host
     environment:
-      AUTH_SERVER_URL: http://10.10.2.10:8081
-      RABBITMQ_HOST: 10.10.6.10
-      RABBITMQ_PORT: 5672
-      RABBITMQ_USER: ${RABBITMQ_USER:-smarttraffic}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me-in-production}
-      RABBITMQ_VHOST: smarttraffic
-      SMARTTRAFFIC_CLIENT_ID: smarttraffic
-      SMARTTRAFFIC_CLIENT_SECRET: ${SMARTTRAFFIC_CLIENT_SECRET:-change-me-in-production}
+      <<: *rabbit-env
       SERVER_PORT: 8082
-    ports:
-      - "8082:8082"
+      DASHBOARD_CLIENT_SECRET: ${DASHBOARD_CLIENT_SECRET:?}
     deploy:
-      replicas: 2
       resources:
         limits:
           cpus: "0.5"
           memory: 384M
+    restart: unless-stopped
+
+  alert-dispatcher:
+    build:
+      context: ../..
+      dockerfile: alert-dispatcher/Dockerfile
+    image: smarttraffic/alert-dispatcher:latest
+    network_mode: host
+    environment:
+      <<: *rabbit-env
+      ALERT_CLIENT_SECRET: ${ALERT_CLIENT_SECRET:?}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.4"
+          memory: 320M
+    restart: unless-stopped
+
+  query-client:
+    build:
+      context: ../..
+      dockerfile: query-client/Dockerfile
+    image: smarttraffic/query-client:latest
+    network_mode: host
+    environment:
+      <<: *rabbit-env
+      QUERY_CLIENT_SECRET: ${QUERY_CLIENT_SECRET:?}
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
     restart: unless-stopped

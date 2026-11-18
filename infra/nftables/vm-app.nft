@@ -1,22 +1,43 @@
 #!/usr/sbin/nft -f
-flush ruleset
+# =============================================================================
+# vm-app (Zona de Aplicacion - DMZ)
+#   user_dashboard_backend, alert_dispatcher, query_client (replicas).
+# Unica zona que expone un puerto al exterior: el WebSocket del dashboard.
+# =============================================================================
+table inet smarttraffic
+delete table inet smarttraffic
 
-table inet filter {
+define HYPERVISOR = 10.0.2.2
+define VM_AUTH    = 192.168.56.10
+define VM_DATA    = 192.168.56.20
+define AUTH_PORT  = 8081
+define DASHBOARD_PORT = 8082
+
+table inet smarttraffic {
   chain input {
     type filter hook input priority filter; policy drop;
     iif "lo" accept
+    ct state invalid drop
     ct state established,related accept
-    tcp dport 22 accept
-    # Permitir puerto del WebSocket y API del Dashboard (8082) hacia clientes externos
-    tcp dport 8082 accept
+    ip saddr $HYPERVISOR tcp dport 22 accept comment "gestion vagrant ssh"
+    udp sport 67 udp dport 68 accept comment "renovacion DHCP de la NIC NAT"
+    tcp dport $DASHBOARD_PORT ct state new accept comment "dashboard.html + WebSocket para clientes externos"
+    limit rate 6/minute log prefix "ST-DROP-IN: " level info
+    counter drop
   }
+
+  chain forward {
+    type filter hook forward priority filter; policy drop;
+  }
+
   chain output {
     type filter hook output priority filter; policy drop;
     oif "lo" accept
     ct state established,related accept
-    # Permitir puerto de Auth hacia vm-auth (10.10.2.0/24)
-    ip daddr 10.10.2.0/24 tcp dport 8081 accept
-    # Permitir puerto 5672 hacia vm-data (10.10.6.0/24)
-    ip daddr 10.10.6.0/24 tcp dport 5672 accept
+    udp sport 68 udp dport 67 accept comment "DHCP"
+    ip daddr $VM_AUTH tcp dport $AUTH_PORT ct state new accept comment "pedir JWT"
+    ip daddr $VM_DATA tcp dport 5672       ct state new accept comment "RabbitMQ"
+    limit rate 6/minute log prefix "ST-DROP-OUT: " level info
+    counter drop
   }
 }

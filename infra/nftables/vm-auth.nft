@@ -1,18 +1,48 @@
 #!/usr/sbin/nft -f
-flush ruleset
+# =============================================================================
+# vm-auth (Zona de Autoridad) - unica entidad que firma y emite JWT.
+# Politica: DROP por defecto en input, forward y output.
+# =============================================================================
+# Idempotente: crea la tabla si no existe y la borra, para recargar limpio.
+# No usamos "flush ruleset" para no destruir las tablas que gestiona Docker.
+table inet smarttraffic
+delete table inet smarttraffic
 
-table inet filter {
+define HYPERVISOR = 10.0.2.2        # NAT de VirtualBox (unico origen SSH de gestion)
+define VM_DATA    = 192.168.56.20
+define VM_INGEST  = 192.168.56.30
+define VM_CORE    = 192.168.56.40
+define VM_APP     = 192.168.56.50
+define AUTH_PORT  = 8081
+
+table inet smarttraffic {
   chain input {
     type filter hook input priority filter; policy drop;
     iif "lo" accept
+    ct state invalid drop
     ct state established,related accept
-    tcp dport 22 accept
-    # Permitir puerto de autenticacion (8081) unicamente desde las IPs de vm-ingest, vm-core y vm-app
-    ip saddr { 10.10.3.0/24, 10.10.4.0/24, 10.10.5.0/24 } tcp dport 8081 accept
+    ip saddr $HYPERVISOR tcp dport 22 accept comment "gestion vagrant ssh"
+    udp sport 67 udp dport 68 accept comment "renovacion DHCP de la NIC NAT"
+
+    # Puerto de autenticacion SOLO desde las zonas que piden tokens.
+    ip saddr { $VM_INGEST, $VM_CORE, $VM_APP } tcp dport $AUTH_PORT ct state new accept comment "solicitud de JWT (/token)"
+    # Los brokers de vm-data descargan la clave publica (JWKS) para validar JWT.
+    ip saddr $VM_DATA tcp dport $AUTH_PORT ct state new accept comment "JWKS para Kafka/RabbitMQ"
+
+    limit rate 6/minute log prefix "ST-DROP-IN: " level info
+    counter drop
   }
+
+  chain forward {
+    type filter hook forward priority filter; policy drop;
+  }
+
   chain output {
     type filter hook output priority filter; policy drop;
     oif "lo" accept
-    ct state established,related accept
+    ct state established,related accept comment "solo respuestas a conexiones autorizadas"
+    udp sport 68 udp dport 67 accept comment "DHCP"
+    limit rate 6/minute log prefix "ST-DROP-OUT: " level info
+    counter drop
   }
 }

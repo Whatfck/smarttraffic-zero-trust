@@ -1,3 +1,8 @@
 target/
 .env
 .DS_Store
+.vagrant/
+.secrets/
+*.log
+.idea/
+.vscode/

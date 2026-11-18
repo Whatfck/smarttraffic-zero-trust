@@ -1,0 +1,4 @@
+# Forzar finales de linea LF: los scripts y reglas nftables se ejecutan dentro de VMs Linux
+* text=auto eol=lf
+*.jar binary
+*.png binary
