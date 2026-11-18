@@ -194,4 +194,9 @@ Todo el dominio está en `smarttraffic-domain` y es **Java puro**: no depende de
   la cola, cada una recibiría solo la mitad de los mensajes (consumidores competidores).
 - **¿Dónde está la persistencia inmutable?** Las tablas `traffic_readings` y `audit_events` son
   append-only (`@Immutable`, columnas `updatable = false`).
+- **¿Qué pasa si los relojes de las VMs no coinciden?** Los JWT tienen `iat` y `exp`. Si vm-auth
+  va atrasada, sus tokens llegan "vencidos" a Kafka. Nos pasó durante las pruebas: VirtualBox en
+  Windows entregaba la hora local como si fuera UTC. Se resolvió con `--rtcuseutc on` y la
+  sincronización de hora con el anfitrión (NTP está bloqueado por el firewall). Kafka tolera
+  30 segundos de desfase (`clock skew`).
 - **¿Por qué ZooKeeper?** El enunciado lo pide (`kafka (+ zookeeper)`), y escucha solo en loopback.

@@ -123,3 +123,8 @@ docker run --rm -v "$PWD":/app -w /app maven:3.9.6-eclipse-temurin-17-alpine mvn
   (`vagrant ssh vm-app -c "docker compose -p smarttraffic ps"`) y use la IP 192.168.56.50.
 - **Kafka no acepta conexiones:** Kafka descarga el JWKS de vm-auth al arrancar, así que vm-auth
   debe estar arriba primero. Ejecute `vagrant ssh vm-data -c "docker restart smarttraffic-kafka-1"`.
+- **`invalid_token` / "JWT is no longer valid" en los logs:** los relojes de las VMs no coinciden.
+  Los JWT llevan `iat`/`exp`, así que todas las VMs deben tener la misma hora. El `Vagrantfile`
+  ya fuerza el reloj en UTC (`--rtcuseutc on`) y la sincronización con el anfitrión. Para revisarlo:
+  `vagrant ssh vm-auth -c "date -u"` y compárelo con las demás VMs. Si una VM se creó antes de
+  ese ajuste, ejecute `vagrant reload <vm>`.
