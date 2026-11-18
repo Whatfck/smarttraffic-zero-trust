@@ -60,6 +60,8 @@ smarttraffic:
         - rabbitmq.read:smarttraffic/query_traffic_queue
         - rabbitmq.configure:smarttraffic/query_answers
         - rabbitmq.write:smarttraffic/query_answers
+        # topic exchange: ademas del recurso se autoriza la routing key
+        - rabbitmq.write:smarttraffic/query_answers/query.*
       roles: [ALERTS]
 
     query-client:
@@ -70,6 +72,7 @@ smarttraffic:
         - rabbitmq.write:smarttraffic/amq.default
         - rabbitmq.configure:smarttraffic/query_answers
         - rabbitmq.read:smarttraffic/query_answers
+        - rabbitmq.read:smarttraffic/query_answers/query.qc-*   # solo claves de clientes
         - rabbitmq.configure:smarttraffic/query_client.*
         - rabbitmq.write:smarttraffic/query_client.*
         - rabbitmq.read:smarttraffic/query_client.*
