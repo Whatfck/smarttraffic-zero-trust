@@ -1,3 +1,8 @@
 target/
 .env
 .DS_Store
+
+# Archivos markdown locales (solo se versiona README.md)
+*.md
+!README.md
+!**/README.md
