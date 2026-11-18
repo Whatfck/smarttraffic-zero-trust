@@ -10,9 +10,7 @@ import java.util.Objects;
 public record ZoneTrafficSnapshot(String zoneId, double density, CongestionState state,
                                   long readings, Instant updatedAt) {
     public ZoneTrafficSnapshot {
-        if (zoneId == null || zoneId.isBlank()) {
-            throw new IllegalArgumentException("zoneId must not be blank");
-        }
+        ZoneId.of(zoneId); // valida el identificador (no vacio, formato seguro)
         new TrafficDensity(density); // valida rango 0..1 (fail-fast)
         Objects.requireNonNull(state, "state must not be null");
         if (readings < 0) {

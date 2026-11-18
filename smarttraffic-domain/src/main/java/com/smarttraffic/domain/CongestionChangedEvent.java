@@ -7,9 +7,7 @@ import java.util.Objects;
 public record CongestionChangedEvent(String zoneId, CongestionState previous, CongestionState current,
                                      double density, Instant occurredAt) {
     public CongestionChangedEvent {
-        if (zoneId == null || zoneId.isBlank()) {
-            throw new IllegalArgumentException("zoneId must not be blank");
-        }
+        ZoneId.of(zoneId); // valida el identificador (no vacio, formato seguro)
         Objects.requireNonNull(previous, "previous must not be null");
         Objects.requireNonNull(current, "current must not be null");
         Objects.requireNonNull(occurredAt, "occurredAt must not be null");

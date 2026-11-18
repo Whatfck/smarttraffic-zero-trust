@@ -14,7 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * cuando una zona cambia de nivel, sin saber quien escucha (alertas, logs, etc.).
  */
 public final class TrafficStateReplica {
-    private final Map<String, ZoneTrafficSnapshot> zones = new ConcurrentHashMap<>();
+    private final Map<ZoneId, ZoneTrafficSnapshot> zones = new ConcurrentHashMap<>();
     private final List<CongestionObserver> observers = new CopyOnWriteArrayList<>();
 
     public void subscribe(CongestionObserver observer) {
@@ -24,11 +24,12 @@ public final class TrafficStateReplica {
     /** Aplica una actualizacion; descarta fotos mas viejas que la que ya tiene. */
     public void apply(ZoneTrafficSnapshot update) {
         Objects.requireNonNull(update, "update must not be null");
-        ZoneTrafficSnapshot previous = zones.get(update.zoneId());
+        ZoneId id = ZoneId.of(update.zoneId());
+        ZoneTrafficSnapshot previous = zones.get(id);
         if (previous != null && update.updatedAt().isBefore(previous.updatedAt())) {
             return;
         }
-        zones.put(update.zoneId(), update);
+        zones.put(id, update);
         CongestionState before = previous == null ? CongestionState.DESPEJADA : previous.state();
         if (before != update.state()) {
             var event = new CongestionChangedEvent(update.zoneId(), before, update.state(),
@@ -38,7 +39,13 @@ public final class TrafficStateReplica {
     }
 
     public ZoneTrafficSnapshot zone(String zoneId) {
-        return Optional.ofNullable(zoneId).map(zones::get).orElseThrow(() -> new ZoneNotFoundException(zoneId));
+        ZoneId id;
+        try {
+            id = ZoneId.of(zoneId);
+        } catch (IllegalArgumentException invalid) {
+            throw new ZoneNotFoundException(zoneId);
+        }
+        return Optional.ofNullable(zones.get(id)).orElseThrow(() -> new ZoneNotFoundException(zoneId));
     }
 
     /** Evalua un trayecto; lanza ZoneNotFoundException si alguna zona no existe. */

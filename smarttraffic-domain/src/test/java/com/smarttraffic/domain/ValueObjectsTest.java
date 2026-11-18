@@ -53,6 +53,16 @@ class ValueObjectsTest {
     }
 
     @Test
+    @DisplayName("ZoneId (identificador record) rechaza vacio, nulo y formatos inseguros")
+    void zoneIdFailsFast() {
+        assertThrows(IllegalArgumentException.class, () -> ZoneId.of(null));
+        assertThrows(IllegalArgumentException.class, () -> ZoneId.of("  "));
+        assertThrows(IllegalArgumentException.class, () -> ZoneId.of("north; DROP TABLE"));
+        assertEquals(ZoneId.of("north"), ZoneId.of("north"));
+        assertThrows(IllegalArgumentException.class, () -> new TrafficReading("zona mala", 1, 1, NOW));
+    }
+
+    @Test
     @DisplayName("Las estrategias rechazan parametros no positivos")
     void strategiesFailFast() {
         assertThrows(IllegalArgumentException.class, () -> new VehicleDensityStrategy(0));

@@ -15,7 +15,7 @@ import java.util.Objects;
  * - Es el SUJETO del patron OBSERVER: notifica cambios de nivel a sus observadores.
  */
 public final class ZoneTrafficAggregate {
-    private final String zoneId;
+    private final ZoneId zoneId;
     private final TrafficDensityStrategy strategy;
     private final List<CongestionObserver> observers = new ArrayList<>();
     private TrafficZoneState state;
@@ -29,10 +29,7 @@ public final class ZoneTrafficAggregate {
 
     private ZoneTrafficAggregate(String zoneId, TrafficDensityStrategy strategy, TrafficZoneState state,
                                  TrafficDensity density, long readings, Instant updatedAt) {
-        if (zoneId == null || zoneId.isBlank()) {
-            throw new IllegalArgumentException("zoneId must not be blank");
-        }
-        this.zoneId = zoneId;
+        this.zoneId = ZoneId.of(zoneId);   // identificador validado (Value Object)
         this.strategy = Objects.requireNonNull(strategy, "strategy must not be null");
         this.state = Objects.requireNonNull(state, "state must not be null");
         this.density = Objects.requireNonNull(density, "density must not be null");
@@ -54,7 +51,7 @@ public final class ZoneTrafficAggregate {
     /** Metodo de negocio: incorpora una lectura y devuelve el nuevo estado consolidado. */
     public ZoneTrafficSnapshot record(TrafficReading reading) {
         Objects.requireNonNull(reading, "reading must not be null");
-        if (!reading.belongsTo(zoneId)) {
+        if (!reading.belongsTo(zoneId.value())) {
             throw new IllegalArgumentException("reading of zone " + reading.zoneId()
                     + " cannot be recorded in zone " + zoneId);
         }
@@ -66,17 +63,21 @@ public final class ZoneTrafficAggregate {
 
         CongestionState current = state.level();
         if (previous != current) {
-            var event = new CongestionChangedEvent(zoneId, previous, current, density.value(), updatedAt);
+            var event = new CongestionChangedEvent(zoneId.value(), previous, current, density.value(), updatedAt);
             observers.forEach(observer -> observer.onCongestionChanged(event));
         }
         return snapshot();
     }
 
     public ZoneTrafficSnapshot snapshot() {
-        return new ZoneTrafficSnapshot(zoneId, density.value(), state.level(), readings, updatedAt);
+        return new ZoneTrafficSnapshot(zoneId.value(), density.value(), state.level(), readings, updatedAt);
     }
 
     public String zoneId() {
+        return zoneId.value();
+    }
+
+    public ZoneId id() {
         return zoneId;
     }
 

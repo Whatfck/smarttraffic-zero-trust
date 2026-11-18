@@ -10,9 +10,7 @@ import java.util.Objects;
  */
 public record TrafficReading(String zoneId, int vehicles, double averageSpeed, Instant observedAt) {
     public TrafficReading {
-        if (zoneId == null || zoneId.isBlank()) {
-            throw new IllegalArgumentException("zoneId must not be blank");
-        }
+        ZoneId.of(zoneId); // valida el identificador (no vacio, formato seguro)
         if (vehicles < 0) {
             throw new IllegalArgumentException("vehicles must not be negative");
         }
