@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Random;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,7 @@ public class TrafficReadingGenerator {
     private final Random random;
     private int cursor;
 
+    @Autowired   // dos constructores: Spring usa este; el otro es para pruebas (Random fijo)
     public TrafficReadingGenerator(@Value("${smarttraffic.sensor.zones}") List<String> zones,
                                    @Value("${smarttraffic.sensor.wave-seconds:180}") double waveSeconds,
                                    Clock clock) {
