@@ -32,6 +32,18 @@ public final class JwksController {
                 "e", base64Url(publicKey.getPublicExponent()))));
     }
 
+    /**
+     * La misma clave publica en formato PEM. RabbitMQ exige https para descargar un
+     * JWKS, asi que en vm-data se "fija" (key pinning) esta clave durante el
+     * aprovisionamiento y el broker verifica las firmas sin depender de la red.
+     */
+    @GetMapping(value = "/.well-known/signing-key.pem", produces = "text/plain")
+    public String signingKeyPem() {
+        String body = Base64.getMimeEncoder(64, "\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII))
+                .encodeToString(keys.keyPair().getPublic().getEncoded());
+        return "-----BEGIN PUBLIC KEY-----\n" + body + "\n-----END PUBLIC KEY-----\n";
+    }
+
     private static String base64Url(BigInteger value) {
         byte[] bytes = value.toByteArray();
         if (bytes.length > 1 && bytes[0] == 0) {   // quitar byte de signo

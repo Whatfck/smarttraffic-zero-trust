@@ -4,5 +4,3 @@
 .secrets
 *.md
 .images
-.mvn-repo/*
-!.mvn-repo/.gitkeep

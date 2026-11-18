@@ -64,6 +64,28 @@ KAFKA_BROKER_CLIENT_SECRET=$(rnd)
 EOF
 fi
 
+# --- vm-data: fijar la clave publica de la Autoridad para RabbitMQ ------------
+# RabbitMQ solo acepta descargar JWKS por https; en su lugar se fija (pinning) la
+# clave publica RS256 de vm-auth junto con su identificador (kid).
+if [ "$ZONE" = "vm-data" ]; then
+  KEY_DIR="$SECRETS_DIR/rabbitmq"
+  mkdir -p "$KEY_DIR"
+  AUTH=http://192.168.56.10:8081
+  for attempt in $(seq 1 60); do
+    curl -sf -m 5 "$AUTH/.well-known/signing-key.pem" -o "$KEY_DIR/signing-key.pem.tmp" && grep -q "BEGIN PUBLIC KEY" "$KEY_DIR/signing-key.pem.tmp" && break
+    [ "$attempt" = 60 ] && { log "ERROR: vm-auth no publica su clave (levante vm-auth primero)"; exit 1; }
+    log "Esperando la clave publica de vm-auth ($attempt/60)..."; sleep 5
+  done
+  mv -f "$KEY_DIR/signing-key.pem.tmp" "$KEY_DIR/signing-key.pem"
+  KID=$(curl -sf -m 5 "$AUTH/.well-known/jwks.json" | grep -o '"kid":"[^"]*"' | cut -d'"' -f4)
+  {
+    echo "auth_oauth2.signing_keys.$KID = /etc/rabbitmq/keys/signing-key.pem"
+    echo "auth_oauth2.default_key = $KID"
+  } > "$KEY_DIR/30-signing-key.conf"
+  chmod 644 "$KEY_DIR/signing-key.pem" "$KEY_DIR/30-signing-key.conf"
+  log "Clave publica de vm-auth fijada en RabbitMQ (kid=$KID)"
+fi
+
 # --- Cache compartida de imagenes base (red lenta) ----------------------------
 # La primera VM que descarga una imagen la guarda en .images/ (carpeta sincronizada)
 # y las demas la cargan desde alli en vez de volver a bajarla de Internet.
@@ -78,7 +100,11 @@ cached_image() {
     docker load -i "$file" >/dev/null
   else
     log "Descargando $image"
-    docker pull -q "$image" >/dev/null
+    for attempt in 1 2 3 4 5; do
+      docker pull -q "$image" >/dev/null && break
+      [ "$attempt" = 5 ] && { log "ERROR: no se pudo descargar $image"; exit 1; }
+      log "Reintentando descarga de $image ($attempt/5)..."; sleep 10
+    done
     docker save -o "$file.$ZONE.tmp" "$image" && mv -f "$file.$ZONE.tmp" "$file"
   fi
 }
@@ -100,7 +126,12 @@ if [ -f "$COMPOSE_FILE" ]; then
   COMPOSE=(docker compose --project-name smarttraffic --env-file "$SECRETS_FILE" -f "$COMPOSE_FILE")
   for service in $("${COMPOSE[@]}" config --services); do
     log "Preparando imagen de $service..."
-    "${COMPOSE[@]}" build "$service"    # no-op para servicios que solo usan image:
+    # no-op para servicios que solo usan image:. Se reintenta por cortes de red.
+    for attempt in 1 2 3; do
+      "${COMPOSE[@]}" build "$service" && break
+      [ "$attempt" = 3 ] && { log "ERROR: no se pudo compilar $service"; exit 1; }
+      log "Reintentando compilacion de $service ($attempt/3)..."; sleep 10
+    done
   done
   docker compose --project-name smarttraffic --env-file "$SECRETS_FILE" \
     -f "$COMPOSE_FILE" up -d --remove-orphans

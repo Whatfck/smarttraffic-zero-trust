@@ -69,6 +69,9 @@ services:
       - rabbitmq-data:/var/lib/rabbitmq
       - ../rabbitmq/20-smarttraffic.conf:/etc/rabbitmq/conf.d/20-smarttraffic.conf:ro
       - ../rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      # Clave publica de vm-auth fijada durante el aprovisionamiento (ver provision.sh)
+      - ../../.secrets/rabbitmq/30-signing-key.conf:/etc/rabbitmq/conf.d/30-signing-key.conf:ro
+      - ../../.secrets/rabbitmq/signing-key.pem:/etc/rabbitmq/keys/signing-key.pem:ro
     deploy:
       resources:
         limits:
