@@ -118,6 +118,11 @@ docker run --rm -v "$PWD":/app -w /app maven:3.9.6-eclipse-temurin-17-alpine mvn
 ```
 
 ## 5. Problemas comunes
+- **No suspenda el PC con las VMs encendidas.** Si Windows entra en suspensión (incluida la
+  "suspensión moderna" al apagarse la pantalla), las VMs se congelan y al despertar algún
+  servicio puede quedar trabado. Configure *Suspender = Nunca* con el cargador conectado. Si
+  ocurre, reinicie la VM afectada con `vagrant reload <vm>`. Si un contenedor quedó detenido,
+  arránquelo con `vagrant ssh <vm> -c "sudo docker start <contenedor>"`.
 - **Una VM tarda o falla al compilar por red:** ejecute `vagrant provision <vm>`. El script es idempotente.
 - **No abre el dashboard:** compruebe que `vm-app` esté arriba
   (`vagrant ssh vm-app -c "docker compose -p smarttraffic ps"`) y use la IP 192.168.56.50.
