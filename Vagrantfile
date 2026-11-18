@@ -39,6 +39,14 @@ Vagrant.configure("2") do |config|
         vb.memory = zone[:memory]
         vb.cpus = zone[:cpus]
         vb.customize ["modifyvm", :id, "--ioapic", "on"]
+        # Reloj en UTC: Ubuntu asume que el RTC esta en UTC. Sin esto, en Windows la VM
+        # arranca con la hora LOCAL tomada como UTC (5 h de desfase en Colombia) y los
+        # JWT emitidos por vm-auth llegan "vencidos" a Kafka/RabbitMQ.
+        vb.customize ["modifyvm", :id, "--rtcuseutc", "on"]
+        # Sincronizar la hora del invitado con el anfitrion si se desvia mas de 10 s
+        # (el firewall bloquea NTP, asi que la fuente de hora es el hipervisor).
+        vb.customize ["guestproperty", "set", :id,
+                      "/VirtualBox/GuestAdd/VBoxService/--timesync-set-threshold", "10000"]
       end
 
       # 1) Instala Docker + nftables, 2) compila y arranca los contenedores de la
