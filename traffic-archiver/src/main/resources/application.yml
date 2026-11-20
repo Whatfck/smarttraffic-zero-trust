@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: traffic-archiver
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+  # Kafka (vm-data) con SASL/OAUTHBEARER: consume presentando su JWT.
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}
+      sasl.mechanism: OAUTHBEARER
+      sasl.oauthbearer.token.endpoint.url: ${smarttraffic.identity.token-endpoint}
+      sasl.login.callback.handler.class: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler
+      # Renovar el JWT 60 s antes de que venza (el default de 300 s no deja margen)
+      sasl.login.refresh.buffer.seconds: 60
+      sasl.login.refresh.min.period.seconds: 30
+      sasl.jaas.config: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required clientId="${smarttraffic.identity.client-id}" clientSecret="${smarttraffic.identity.client-secret}";
+
+  # PostgreSQL (postgres-db en vm-data). Solo vm-core puede llegar al 5432 (nftables).
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:smarttraffic}
+    username: ${POSTGRES_USER:smarttraffic}
+    password: ${POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      initialization-fail-timeout: -1   # arranca aunque la BD aun no responda; reintenta
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+smarttraffic:
+  identity:
+    token-endpoint: ${AUTH_SERVER_URL:http://localhost:8081}/token
+    client-id: traffic-archiver
+    client-secret: ${ARCHIVER_CLIENT_SECRET}
+  kafka:
+    raw-topic: raw_traffic_data
+    group-id: traffic-archiver

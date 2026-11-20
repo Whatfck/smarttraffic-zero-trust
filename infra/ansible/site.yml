@@ -1,0 +1,20 @@
+---
+# Alternativa a Vagrant: aprovisiona maquinas YA existentes (mismas 5 zonas).
+# Ejecuta exactamente el mismo script que usa Vagrant, asi ambas vias son equivalentes.
+#   ansible-playbook -i inventory.ini site.yml
+- name: Provision SmartTraffic zero-trust zones
+  hosts: smarttraffic
+  become: true
+  vars:
+    project_dir: /opt/smarttraffic
+  tasks:
+    - name: Copiar el repositorio a la VM
+      ansible.builtin.synchronize:
+        src: "{{ playbook_dir }}/../../"
+        dest: "{{ project_dir }}/"
+        rsync_opts: ["--exclude=.git", "--exclude=target", "--exclude=.vagrant"]
+
+    - name: Instalar Docker, compilar/arrancar contenedores y aplicar nftables
+      ansible.builtin.command:
+        cmd: "bash {{ project_dir }}/infra/scripts/provision.sh {{ inventory_hostname }}"
+      changed_when: true

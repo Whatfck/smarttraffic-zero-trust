@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: alert-dispatcher
+  main:
+    web-application-type: none
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  # RabbitMQ (vm-data): sin usuario/contrasena, se autentica con JWT (OAuth2).
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    virtual-host: smarttraffic
+    listener:
+      simple:
+        default-requeue-rejected: false   # un mensaje invalido no se reintenta en bucle
+
+smarttraffic:
+  identity:
+    token-endpoint: ${AUTH_SERVER_URL:http://localhost:8081}/token
+    client-id: alert-dispatcher
+    client-secret: ${ALERT_CLIENT_SECRET}
+  rabbit:
+    updates-exchange: traffic_updates
+    query-queue: query_traffic_queue
+    answers-exchange: query_answers

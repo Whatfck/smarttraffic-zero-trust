@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: traffic-sensor-simulator
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+  # Kafka (vm-data) con SASL/OAUTHBEARER: el productor pide su JWT a vm-auth antes
+  # de conectar; el broker valida firma (JWKS), expiracion y audiencia "kafka".
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_PLAINTEXT}
+      sasl.mechanism: OAUTHBEARER
+      sasl.oauthbearer.token.endpoint.url: ${smarttraffic.identity.token-endpoint}
+      sasl.login.callback.handler.class: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginCallbackHandler
+      # Renovar el JWT 60 s antes de que venza (el default de 300 s no deja margen)
+      sasl.login.refresh.buffer.seconds: 60
+      sasl.login.refresh.min.period.seconds: 30
+      sasl.jaas.config: org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required clientId="${smarttraffic.identity.client-id}" clientSecret="${smarttraffic.identity.client-secret}";
+
+smarttraffic:
+  identity:
+    token-endpoint: ${AUTH_SERVER_URL:http://localhost:8081}/token
+    client-id: traffic-sensor-simulator
+    client-secret: ${SENSOR_CLIENT_SECRET}
+  kafka:
+    raw-topic: raw_traffic_data
+  sensor:
+    zones: north,center,south,east,west
+    period-ms: ${SENSOR_PERIOD_MS:1000}
+    wave-seconds: 180

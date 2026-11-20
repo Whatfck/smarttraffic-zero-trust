@@ -1,0 +1,41 @@
+#!/usr/sbin/nft -f
+# =============================================================================
+# vm-core (Zona de Procesamiento y Persistencia)
+#   traffic_density_processor + traffic_archiver.
+# No recibe conexiones; solo sale hacia Auth, Kafka, RabbitMQ y PostgreSQL.
+# =============================================================================
+table inet smarttraffic
+delete table inet smarttraffic
+
+define HYPERVISOR = 10.0.2.2
+define VM_AUTH    = 192.168.56.10
+define VM_DATA    = 192.168.56.20
+define AUTH_PORT  = 8081
+
+table inet smarttraffic {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iif "lo" accept
+    ct state invalid drop
+    ct state established,related accept
+    ip saddr $HYPERVISOR tcp dport 22 accept comment "gestion vagrant ssh"
+    udp sport 67 udp dport 68 accept comment "renovacion DHCP de la NIC NAT"
+    limit rate 6/minute log prefix "ST-DROP-IN: " level info
+    counter drop
+  }
+
+  chain forward {
+    type filter hook forward priority filter; policy drop;
+  }
+
+  chain output {
+    type filter hook output priority filter; policy drop;
+    oif "lo" accept
+    ct state established,related accept
+    udp sport 68 udp dport 67 accept comment "DHCP"
+    ip daddr $VM_AUTH tcp dport $AUTH_PORT         ct state new accept comment "pedir JWT"
+    ip daddr $VM_DATA tcp dport { 9092, 5672, 5432 } ct state new accept comment "Kafka, RabbitMQ y PostgreSQL"
+    limit rate 6/minute log prefix "ST-DROP-OUT: " level info
+    counter drop
+  }
+}

@@ -1,0 +1,48 @@
+#!/usr/sbin/nft -f
+# =============================================================================
+# vm-data (Zona de Datos y Persistencia) - Kafka(+ZooKeeper), RabbitMQ, PostgreSQL.
+# Politica: DROP por defecto en input, forward y output.
+# =============================================================================
+table inet smarttraffic
+delete table inet smarttraffic
+
+define HYPERVISOR = 10.0.2.2
+define VM_AUTH    = 192.168.56.10
+define VM_INGEST  = 192.168.56.30
+define VM_CORE    = 192.168.56.40
+define VM_APP     = 192.168.56.50
+define AUTH_PORT  = 8081
+
+table inet smarttraffic {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iif "lo" accept
+    ct state invalid drop
+    ct state established,related accept
+    ip saddr $HYPERVISOR tcp dport 22 accept comment "gestion vagrant ssh"
+    udp sport 67 udp dport 68 accept comment "renovacion DHCP de la NIC NAT"
+
+    ip saddr { $VM_INGEST, $VM_CORE } tcp dport 9092 ct state new accept comment "Kafka: productor (ingest) y consumidores (core)"
+    ip saddr { $VM_CORE, $VM_APP }    tcp dport 5672 ct state new accept comment "RabbitMQ: processor (core) y servicios de vm-app"
+    ip saddr $VM_CORE                 tcp dport 5432 ct state new accept comment "PostgreSQL: solo traffic_archiver"
+    # ZooKeeper (2181) y la consola de RabbitMQ (15672) NO se exponen a nadie.
+
+    limit rate 6/minute log prefix "ST-DROP-IN: " level info
+    counter drop
+  }
+
+  chain forward {
+    type filter hook forward priority filter; policy drop;
+  }
+
+  chain output {
+    type filter hook output priority filter; policy drop;
+    oif "lo" accept
+    ct state established,related accept comment "respuestas a los origenes autorizados"
+    udp sport 68 udp dport 67 accept comment "DHCP"
+    # Kafka y RabbitMQ validan los JWT con la clave publica (JWKS) del auth_server.
+    ip daddr $VM_AUTH tcp dport $AUTH_PORT ct state new accept comment "descarga de JWKS"
+    limit rate 6/minute log prefix "ST-DROP-OUT: " level info
+    counter drop
+  }
+}

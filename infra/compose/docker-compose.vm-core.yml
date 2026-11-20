@@ -1,0 +1,46 @@
+# =============================================================================
+# vm-core (Zona de Procesamiento y Persistencia)
+#   traffic-density-processor: Kafka Streams (KTable) stateful, 2 replicas que se
+#                              reparten las particiones de raw_traffic_data.
+#   traffic-archiver:          persistencia relacional en postgres-db (vm-data).
+# =============================================================================
+name: smarttraffic
+services:
+  traffic-density-processor:
+    build:
+      context: ../..
+      dockerfile: traffic-density-processor/Dockerfile
+    image: smarttraffic/traffic-density-processor:latest
+    network_mode: host
+    environment:
+      AUTH_SERVER_URL: http://192.168.56.10:8081
+      KAFKA_BOOTSTRAP_SERVERS: 192.168.56.20:9092
+      RABBITMQ_HOST: 192.168.56.20
+      PROCESSOR_CLIENT_SECRET: ${PROCESSOR_CLIENT_SECRET:?}
+      DENSITY_STRATEGY: weighted        # vehicle | speed | weighted (Strategy)
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: "0.6"
+          memory: 448M
+    restart: unless-stopped
+
+  traffic-archiver:
+    build:
+      context: ../..
+      dockerfile: traffic-archiver/Dockerfile
+    image: smarttraffic/traffic-archiver:latest
+    network_mode: host
+    environment:
+      AUTH_SERVER_URL: http://192.168.56.10:8081
+      KAFKA_BOOTSTRAP_SERVERS: 192.168.56.20:9092
+      POSTGRES_HOST: 192.168.56.20
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      ARCHIVER_CLIENT_SECRET: ${ARCHIVER_CLIENT_SECRET:?}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 448M
+    restart: unless-stopped

@@ -1,0 +1,11 @@
+target/
+.env
+.DS_Store
+.vagrant/
+.secrets/
+*.log
+.idea/
+.vscode/
+.images/
+.mvn-repo/*
+!.mvn-repo/.gitkeep

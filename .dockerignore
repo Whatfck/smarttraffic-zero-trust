@@ -1,0 +1,6 @@
+**/target
+.git
+.vagrant
+.secrets
+*.md
+.images

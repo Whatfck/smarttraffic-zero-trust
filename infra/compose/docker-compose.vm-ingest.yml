@@ -1,0 +1,22 @@
+# =============================================================================
+# vm-ingest (Zona de Ingesta - Edge): traffic_sensor_simulator con cuota reducida.
+# =============================================================================
+name: smarttraffic
+services:
+  traffic-sensor-simulator:
+    build:
+      context: ../..
+      dockerfile: traffic-sensor-simulator/Dockerfile
+    image: smarttraffic/traffic-sensor-simulator:latest
+    network_mode: host
+    environment:
+      AUTH_SERVER_URL: http://192.168.56.10:8081
+      KAFKA_BOOTSTRAP_SERVERS: 192.168.56.20:9092
+      SENSOR_CLIENT_SECRET: ${SENSOR_CLIENT_SECRET:?}
+      SENSOR_PERIOD_MS: 1000
+    deploy:
+      resources:
+        limits:
+          cpus: "0.35"
+          memory: 300M
+    restart: unless-stopped

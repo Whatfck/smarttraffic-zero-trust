@@ -1,0 +1,32 @@
+# =============================================================================
+# vm-auth (Zona de Autoridad): auth_server, unica entidad que firma JWT.
+# =============================================================================
+name: smarttraffic
+services:
+  auth-server:
+    build:
+      context: ../..
+      dockerfile: auth-server/Dockerfile
+    image: smarttraffic/auth-server:latest
+    network_mode: host
+    environment:
+      SERVER_PORT: 8081
+      AUTH_ISSUER: http://192.168.56.10:8081
+      AUTH_KEY_DIR: /app/data/keys
+      SENSOR_CLIENT_SECRET: ${SENSOR_CLIENT_SECRET:?}
+      PROCESSOR_CLIENT_SECRET: ${PROCESSOR_CLIENT_SECRET:?}
+      ARCHIVER_CLIENT_SECRET: ${ARCHIVER_CLIENT_SECRET:?}
+      DASHBOARD_CLIENT_SECRET: ${DASHBOARD_CLIENT_SECRET:?}
+      ALERT_CLIENT_SECRET: ${ALERT_CLIENT_SECRET:?}
+      QUERY_CLIENT_SECRET: ${QUERY_CLIENT_SECRET:?}
+    volumes:
+      - auth-data:/app/data    # la clave privada RSA persiste solo en vm-auth (volumen propiedad de appuser)
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 320M
+    restart: unless-stopped
+
+volumes:
+  auth-data:
